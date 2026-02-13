@@ -1,30 +1,50 @@
-﻿from fastapi import FastAPI
+﻿from fastapi import FastAPI, Depends
 from pydantic import BaseModel
 from typing import List
 from uuid import uuid4
 
+from sqlalchemy.orm import Session
 
-app = FastAPI(title="FastAPI Starter", version="0.1.0")
+from app.db import Base, engine, SessionLocal
+from app.models import Task as TaskModel
+
+app = FastAPI(title="FastAPI Starter", version="0.2.0")
+
+# crea tablas al arrancar (simple para comenzar)
+Base.metadata.create_all(bind=engine)
+
 
 @app.get("/health")
 def health():
-     return{"status" : "ok"}
+    return {"status": "ok"}
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 
 class TaskIn(BaseModel):
-     title : str
-     done: bool = False
+    title: str
+    done: bool = False
 
-class Task(TaskIn):
-     id: str
 
-tasks : List[Task] = []
+class TaskOut(TaskIn):
+    id: str
 
-@app.post("/tasks", response_model=Task, status_code=201)
-def create_task(payload: TaskIn):
-     task = Task(id=str(uuid4()), **payload.model_dump())
-     tasks.append(task)
-     return task
 
-@app.get("/tasks", response_model = List[Task])
-def lis_tasks():
-     return tasks
+@app.post("/tasks", response_model=TaskOut, status_code=201)
+def create_task(payload: TaskIn, db: Session = Depends(get_db)):
+    task = TaskModel(id=str(uuid4()), title=payload.title, done=payload.done)
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+@app.get("/tasks", response_model=List[TaskOut])
+def list_tasks(db: Session = Depends(get_db)):
+    return db.query(TaskModel).all()
