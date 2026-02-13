@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, Depends
+﻿from fastapi import FastAPI, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List
 from uuid import uuid4
@@ -48,3 +48,34 @@ def create_task(payload: TaskIn, db: Session = Depends(get_db)):
 @app.get("/tasks", response_model=List[TaskOut])
 def list_tasks(db: Session = Depends(get_db)):
     return db.query(TaskModel).all()
+
+@app.get("/tasks/{task_id}", response_model=TaskOut)
+def get_task(task_id: str, db: Session = Depends(get_db)):
+    task = db.query(TaskModel).filter(TaskModel.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+@app.put("/tasks/{task_id}", response_model=TaskOut)
+def update_task(task_id: str, payload: TaskIn, db: Session = Depends(get_db)):
+    task = db.query(TaskModel).filter(TaskModel.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    task.title = payload.title
+    task.done = payload.done
+
+    db.commit()
+    db.refresh(task)
+    return task
+
+@app.delete("/task/{task_id}", status_code=204)
+def delete_task(task_id: str, db: Session = Depends(get_db)):
+    task = db.query(TaskModel).filter(TaskModel.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail = "Task not found")
+
+    db.delete(task)
+    db.commit()
+    return    
+    
